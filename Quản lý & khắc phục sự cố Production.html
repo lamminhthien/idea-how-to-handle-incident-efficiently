@@ -196,11 +196,32 @@ sb.forEach((e,k)=>{e.classList.toggle('on',k==cur);e.classList.toggle('done',k<c
 document.getElementById('pg').innerHTML='<b>'+String(cur+1).padStart(2,'0')+'</b> / '+String(sl.length).padStart(2,'0');st.scrollTop=0;
 try{history.replaceState(null,'','#'+(cur+1))}catch(e){}
 sl[cur].querySelectorAll('.bar i').forEach(b=>{b.style.width=0;setTimeout(()=>b.style.width=b.dataset.g+'%',250)})}
-function text(s){return s.h.replace(/[^\p{L}\p{N}\s&]/gu,'')+'. '+s.n+' '+s.cards.map(c=>c.h+'. '+c.p+' '+(c.t||'')+' '+(c.v||'')).join(' ')}
-function say(){speechSynthesis.cancel();const u=new SpeechSynthesisUtterance(text(S[cur]).replace(/[•→]/g,','));
-u.lang='vi-VN';const v=speechSynthesis.getVoices().find(x=>x.lang.startsWith('vi'));if(v)u.voice=v;u.rate=.95;
-u.onend=()=>{if(speaking){if(cur<S.length-1){show(cur+1);say()}else tog()}};speechSynthesis.speak(u)}
-function tog(){speaking=!speaking;setBtn();speaking?say():speechSynthesis.cancel()}
+const PRON=[[/multi-AZ/gi,'mơ-ti ây di'],[/\bAWS\b/g,'ây đáp-liu ét'],[/\bDNS\b/g,'đi en ét'],[/\bCPU\b/g,'xi pi iu'],[/\bRAM\b/g,'ram'],[/\bOOM\b/g,'ô ô em'],[/\bSMS\b/g,'ét em ét'],[/\bOTP\b/g,'ô ti pi'],[/\bDB\b/g,'đi bi'],[/\bI\/O\b/g,'ai ô'],[/\bAZ\b/g,'ây di'],[/\bSSL\b/g,'ét ét eo'],[/\bHTTP\b/g,'hát ti ti pi'],[/\bTTL\b/g,'ti ti eo'],[/\bVPN\b/g,'vi pi en'],[/\bUnit test\b/gi,'diu nít test'],[/Microsoft Graph/g,'Mai-crô-sốp Gráp'],[/Twilio/g,'Tơ-wi-li-ô'],[/Kafka/g,'Ka-ph-ka'],[/Sentry/g,'Sen-tri'],[/rollback/gi,'rôn-bách'],[/restart/gi,'ri-start'],[/feature flag/gi,'phi-chờ phờ-lách'],[/idempotent/gi,'ai-đem-pô-tần'],[/multi-region/gi,'mơ-ti ri-dần'],[/failover/gi,'phêu-ô-vơ'],[/auto-scaling/gi,'ô-tô xcây-linh'],[/scale out/gi,'xcây át'],[/scale/gi,'xcây'],[/load balancer/gi,'lốt ba-lần-xơ'],[/health check/gi,'hê-eo chếch'],[/postmortem/gi,'pốt-mooc-tem'],[/monitoring/gi,'mo-ni-tơ-rinh'],[/alert/gi,'a-lớt'],[/consumer/gi,'con-xiu-mơ'],[/partition/gi,'pa-ti-sần'],[/\blag\b/gi,'lách'],[/\blog\b/gi,'lóc'],[/error tracking/gi,'e-rơ tra-king'],[/\bcache\b/gi,'cát'],[/\bbrowser\b/gi,'brao-dơ'],[/\bserver\b/gi,'xơ-vơ'],[/\bremote\b/gi,'ri-mốt'],[/\bapp\b/gi,'ép'],[/\bmail\b/gi,'mêu'],[/\bcredit\b/gi,'cờ-re-đít'],[/\bticket\b/gi,'ti-két'],[/\bqueue\b/gi,'kiu'],[/\bretry\b/gi,'ri-trai'],[/\bsupport\b/gi,'sắp-pót'],[/\bstatus\b/gi,'xta-tớt'],[/\bConfig\b/gi,'con-phích'],[/\bdeploy\b/gi,'đi-ploi'],[/\blogin\/logout\b/gi,'đăng nhập, đăng xuất'],[/\blogin\b/gi,'đăng nhập'],[/\blogout\b/gi,'đăng xuất'],[/\bdomain\b/gi,'đô-main'],[/\bAmazon\b/g,'Am-a-dơn']];
+const say_fix=t=>PRON.reduce((a,[r,v])=>a.replace(r,v),t).replace(/[•→]/g,',').replace(/\s*\/\s*/g,' hoặc ').replace(/&/g,' và ').replace(/\s*-\s+/g,', ').replace(/\s+/g,' ').trim();
+const split=t=>t.split(/(?<=[.!?;:])\s+/).flatMap(x=>x.length>110?x.split(/(?<=,)\s+/):[x]).map(x=>x.trim()).filter(Boolean);
+// mỗi đoạn: t = nội dung, p = pitch, r = rate, w = nghỉ sau đoạn (ms)
+function parts(s){const q=[],add=(t,p,r,w)=>{t=say_fix(t);if(t)q.push({t,p,r,w})};
+ add(strip(s.h).replace(/[^\p{L}\p{N}\s&]/gu,''),1.12,1.02,550);
+ split(s.n).forEach((x,k,a)=>add(x,k?1:1.04,1.18,k==a.length-1?600:260));
+ s.cards.forEach(c=>{add(c.h,1.14,1.05,230);
+  (c.p.includes(' • ')?c.p.split(' • '):split(c.p)).forEach((x,k,a)=>add(x.replace(/\.$/,''),1,1.17,k==a.length-1?230:c.p.includes(' • ')?200:150));
+  if(c.g)add((c.gl||'').replace(/\s*\d+.*$/,'')+' khoảng '+c.g+' phần trăm',1.08,1.1,230);
+  if(c.t){const m=c.t.match(/^(Tạm thời|Mục tiêu):\s*(.*)$/s);add(m?m[1]:'Tạm thời',1.18,1.0,90);split(m?m[2]:c.t).forEach((x,k,a)=>add(x.replace(/\.$/,''),.97,1.18,k==a.length-1?200:140))}
+  if(c.v){const m=c.v.match(/^(Vĩnh viễn|Mục tiêu):\s*(.*)$/s);add(m?m[1]:'Về lâu dài',1.18,1.0,90);split(m?m[2]:c.v).forEach((x,k,a)=>add(x.replace(/\.$/,''),.95,1.16,k==a.length-1?450:140))}});
+ return q}
+// chọn giọng tiếng Việt tự nhiên nhất có trên máy
+function pickVoice(){const vs=speechSynthesis.getVoices().filter(x=>/^vi/i.test(x.lang.replace('_','-')));
+ const sc=v=>(/natural|neural|online|premium|enhanced|siri/i.test(v.name)?4:0)+(/google|microsoft/i.test(v.name)?2:0)+(/linh|hoaimy|namminh/i.test(v.name)?2:0)+(v.localService?0:1);
+ return vs.sort((a,b)=>sc(b)-sc(a))[0]}
+let tok=0,tm=0;
+function say(){speechSynthesis.cancel();clearTimeout(tm);const my=++tok,q=parts(S[cur]),v=pickVoice();let i=0;
+ const next=()=>{if(my!=tok||!speaking)return;
+  if(i>=q.length){if(cur<S.length-1){tm=setTimeout(()=>{if(my!=tok||!speaking)return;show(cur+1);say()},700)}else tog();return}
+  const c=q[i++],u=new SpeechSynthesisUtterance(c.t);u.lang='vi-VN';if(v)u.voice=v;u.rate=c.r;u.pitch=c.p;u.volume=1;
+  let done=0;const fin=()=>{if(done++)return;tm=setTimeout(next,c.w)};u.onend=fin;u.onerror=e=>{if(e.error=='canceled'||e.error=='interrupted')return;fin()};
+  speechSynthesis.speak(u)};
+ next()}
+function tog(){speaking=!speaking;setBtn();if(speaking)say();else{tok++;clearTimeout(tm);speechSynthesis.cancel()}}
 function zoom(img,e){e.stopPropagation();const l=document.getElementById('lb');l.querySelector('img').src=img.src;l.querySelector('p').textContent=img.alt;l.classList.add('on')}
 function go(d){show(cur+d);if(speaking)say()}
 function fs(){document.fullscreenElement?document.exitFullscreen():document.documentElement.requestFullscreen&&document.documentElement.requestFullscreen()}
