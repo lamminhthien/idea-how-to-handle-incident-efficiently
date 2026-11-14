@@ -1,0 +1,214 @@
+<!DOCTYPE html>
+<html lang="vi"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Quản lý & khắc phục sự cố Production</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@500;600&display=swap&subset=vietnamese" rel="stylesheet">
+<style>
+:root{
+  --bg:#070b14;--surface:#0e1424;--surface2:#131a2e;--line:rgba(148,163,184,.14);--line2:rgba(148,163,184,.26);
+  --tx:#e8edf7;--mu:#93a0bb;--dim:#5d6a88;
+  --ac:#6ea8ff;--ac2:#8b7bff;--warn:#f5b84b;--ok:#3ecf9a;--er:#f2706b;
+  --sans:"Inter",system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;--mono:"JetBrains Mono",ui-monospace,SFMono-Regular,Menlo,monospace;
+  --pad:clamp(20px,3.4vw,56px)
+}
+*{box-sizing:border-box;margin:0}
+html,body{height:100%}
+body{font-family:var(--sans);background:var(--bg);color:var(--tx);display:flex;flex-direction:column;height:100vh;height:100dvh;overflow:hidden;
+  background-image:radial-gradient(900px 500px at 8% -10%,rgba(110,168,255,.13),transparent 60%),radial-gradient(800px 480px at 100% 0,rgba(139,123,255,.10),transparent 60%);
+  background-attachment:fixed;-webkit-font-smoothing:antialiased}
+svg{width:1em;height:1em;fill:none;stroke:currentColor;stroke-width:2;stroke-linecap:round;stroke-linejoin:round;flex:none}
+
+/* top bar */
+.top{display:flex;align-items:center;justify-content:space-between;padding:16px var(--pad) 12px}
+.brand{display:flex;align-items:center;gap:11px;font-weight:600;font-size:14px;letter-spacing:.01em}
+.logo{width:30px;height:30px;border-radius:8px;display:grid;place-items:center;font-size:17px;color:#fff;background:linear-gradient(135deg,var(--ac),var(--ac2));box-shadow:0 4px 16px rgba(110,168,255,.35)}
+.brand small{display:block;color:var(--dim);font-weight:500;font-size:11.5px;letter-spacing:.06em;text-transform:uppercase;margin-top:1px}
+.ib{background:transparent;border:1px solid var(--line);color:var(--mu);width:36px;height:36px;border-radius:9px;display:grid;place-items:center;font-size:16px;cursor:pointer;transition:.15s}
+.ib:hover{color:var(--tx);border-color:var(--line2);background:rgba(255,255,255,.04)}
+#seg{display:flex;gap:6px;padding:0 var(--pad)}
+#seg button{flex:1;height:18px;background:none;border:0;cursor:pointer;position:relative;padding:0}
+#seg button::after{content:"";position:absolute;left:0;right:0;top:7px;height:3px;border-radius:3px;background:var(--line);transition:.25s}
+#seg button:hover::after{background:var(--line2)}
+#seg button.done::after{background:rgba(110,168,255,.45)}
+#seg button.on::after{background:linear-gradient(90deg,var(--ac),var(--ac2));box-shadow:0 0 12px rgba(110,168,255,.55)}
+
+/* stage */
+#stage{flex:1;overflow:auto;padding:18px var(--pad) 28px;scrollbar-width:thin;scrollbar-color:var(--line2) transparent}
+.slide{display:none;max-width:1560px;margin:0 auto}
+.slide.on{display:block}
+.kick{display:flex;align-items:center;gap:14px;font-size:12.5px;font-weight:600;letter-spacing:.14em;text-transform:uppercase;color:var(--ac)}
+.kick b{font-family:var(--mono);font-weight:600;font-size:13px;padding:3px 9px;border-radius:6px;background:rgba(110,168,255,.12);border:1px solid rgba(110,168,255,.28);letter-spacing:.05em}
+.kick i{flex:0 0 40px;height:1px;background:linear-gradient(90deg,var(--ac),transparent)}
+h1{font-size:clamp(28px,3.3vw,50px);line-height:1.12;font-weight:750;letter-spacing:-.025em;margin:16px 0 10px;max-width:1100px;
+  background:linear-gradient(180deg,#fff,#b9c6e4);-webkit-background-clip:text;background-clip:text;color:transparent}
+.sub{color:var(--mu);font-size:clamp(15px,1.25vw,19px);line-height:1.5;max-width:880px;margin-bottom:26px}
+
+/* stepper */
+.flow{display:flex;align-items:stretch;margin:0 0 26px;border:1px solid var(--line);border-radius:14px;background:rgba(14,20,36,.7);overflow:hidden}
+.step{flex:1;display:flex;align-items:center;gap:12px;padding:15px 18px;font-weight:600;font-size:15px;position:relative;min-width:0}
+.step+.step{border-left:1px solid var(--line)}
+.step em{font-style:normal;font-family:var(--mono);font-size:12.5px;width:28px;height:28px;border-radius:50%;display:grid;place-items:center;flex:none;color:var(--ac);border:1px solid rgba(110,168,255,.45);background:rgba(110,168,255,.1)}
+.step:not(:last-child)::after{content:"";position:absolute;right:-6px;top:50%;width:11px;height:11px;transform:translateY(-50%) rotate(45deg);border-top:1px solid var(--line2);border-right:1px solid var(--line2);background:var(--surface);z-index:2}
+
+/* cards */
+.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,290px),1fr));gap:18px;align-items:stretch}
+.c{display:flex;flex-direction:column;border:1px solid var(--line);border-radius:16px;overflow:hidden;position:relative;
+  background:linear-gradient(180deg,var(--surface2),var(--surface));box-shadow:0 1px 0 rgba(255,255,255,.04) inset,0 18px 40px -22px rgba(0,0,0,.7);transition:border-color .2s,transform .2s}
+.c:hover{border-color:var(--line2);transform:translateY(-2px)}
+.c::before{content:"";position:absolute;left:0;right:0;top:0;height:2px;background:linear-gradient(90deg,var(--ac),var(--ac2));opacity:.9}
+.slide.on .c{animation:rise .55s cubic-bezier(.2,.7,.2,1) both;animation-delay:calc(var(--i)*70ms)}
+@keyframes rise{from{opacity:0;transform:translateY(14px)}to{opacity:1;transform:none}}
+.im{display:grid;gap:8px;padding:14px 14px 0}
+.im.n1{grid-template-columns:1fr}
+.im.n2,.im.n3,.im.n4{grid-template-columns:1fr 1fr}
+.im img{width:100%;height:100px;object-fit:contain;background:#eef1f7;border-radius:10px;padding:5px;cursor:zoom-in;border:1px solid rgba(255,255,255,.06);transition:.15s}
+.im.n1 img{height:clamp(130px,17vh,190px)}
+.im.n2 img{height:clamp(100px,13vh,140px)}
+.im.n3 img:first-child{grid-column:1/-1;height:clamp(100px,13vh,140px)}
+.im img:hover{box-shadow:0 0 0 2px var(--ac);transform:scale(1.015)}
+.cb{display:flex;flex-direction:column;flex:1;padding:18px 20px 20px}
+.idx{font-family:var(--mono);font-size:12px;font-weight:600;color:var(--ac);letter-spacing:.06em;display:flex;align-items:center;gap:8px}
+.idx::after{content:"";flex:1;height:1px;background:var(--line)}
+.c h3{font-size:clamp(17px,1.25vw,20px);font-weight:650;letter-spacing:-.01em;margin:10px 0 6px}
+.c p{color:var(--mu);font-size:clamp(13.5px,.98vw,15px);line-height:1.6}
+.ul{list-style:none;padding:0;margin:4px 0 0;display:grid;gap:9px}
+.ul li{display:flex;gap:11px;color:var(--tx);font-size:clamp(14px,1.05vw,16px);line-height:1.45}
+.ul li::before{content:"";flex:none;width:18px;height:18px;margin-top:1px;border-radius:50%;background:rgba(110,168,255,.14) url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%236ea8ff' stroke-width='3.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 12.5 4 4 8-9'/%3E%3C/svg%3E") center/11px no-repeat;border:1px solid rgba(110,168,255,.35)}
+.gauge{margin-top:14px}
+.gh{display:flex;justify-content:space-between;align-items:baseline;font-size:12.5px;color:var(--mu);margin-bottom:6px}
+.gh b{font-family:var(--mono);font-weight:600;font-size:13px;color:var(--tx)}
+.bar{height:6px;background:rgba(255,255,255,.07);border-radius:6px;overflow:hidden}
+.bar i{display:block;height:100%;border-radius:6px;width:0;transition:width 1.4s cubic-bezier(.2,.7,.2,1);background:linear-gradient(90deg,var(--ok),var(--warn) 65%,var(--er))}
+.sol{margin-top:auto;padding-top:16px;display:grid;gap:8px}
+.f{padding:10px 13px 11px;border-radius:10px;border:1px solid transparent;border-left-width:3px;font-size:clamp(12.5px,.92vw,14px);line-height:1.5;color:#cfd7ea}
+.f span{display:block;font-size:10.5px;font-weight:700;letter-spacing:.11em;text-transform:uppercase;margin-bottom:3px}
+.f.t{background:rgba(245,184,75,.07);border-color:rgba(245,184,75,.18);border-left-color:var(--warn)}
+.f.t span{color:var(--warn)}
+.f.v{background:rgba(62,207,154,.07);border-color:rgba(62,207,154,.18);border-left-color:var(--ok)}
+.f.v span{color:var(--ok)}
+.wide h3{font-size:clamp(20px,1.7vw,26px)}
+.wide .cb{padding:24px 28px 26px}
+
+/* footer */
+.ft{display:grid;grid-template-columns:1fr auto 1fr;align-items:center;gap:12px;padding:12px var(--pad) 16px;border-top:1px solid var(--line);background:rgba(7,11,20,.7);backdrop-filter:blur(10px)}
+.hint{color:var(--dim);font-size:12px;display:flex;gap:6px;align-items:center;flex-wrap:wrap}
+kbd{font-family:var(--mono);font-size:11px;padding:2px 6px;border:1px solid var(--line2);border-bottom-width:2px;border-radius:5px;color:var(--mu)}
+.nav{display:flex;align-items:center;gap:14px}
+#pg{font-family:var(--mono);font-size:14px;color:var(--mu);min-width:78px;text-align:center;letter-spacing:.04em}
+#pg b{color:var(--tx);font-weight:600}
+#pl{justify-self:end;display:flex;align-items:center;gap:9px;border:0;cursor:pointer;color:#fff;font:600 13.5px var(--sans);padding:10px 18px;border-radius:10px;
+  background:linear-gradient(135deg,var(--ac),var(--ac2));box-shadow:0 6px 20px -6px rgba(110,168,255,.6);transition:.15s}
+#pl:hover{filter:brightness(1.1);transform:translateY(-1px)}
+#pl.live{background:linear-gradient(135deg,#f2706b,#e0508b);box-shadow:0 6px 20px -6px rgba(242,112,107,.6)}
+#pl svg{font-size:15px;fill:currentColor;stroke:none}
+
+/* lightbox */
+#lb{position:fixed;inset:0;background:rgba(4,7,14,.92);backdrop-filter:blur(6px);display:none;flex-direction:column;align-items:center;justify-content:center;gap:14px;z-index:20;cursor:zoom-out;padding:24px}
+#lb.on{display:flex;animation:fade .2s}
+@keyframes fade{from{opacity:0}}
+#lb img{max-width:94vw;max-height:84vh;border-radius:12px;background:#fff;box-shadow:0 30px 80px rgba(0,0,0,.6)}
+#lb p{color:var(--mu);font-size:13.5px}
+#lb .x{position:absolute;top:20px;right:20px}
+
+@media(max-width:900px){
+  .flow{flex-direction:column}.step+.step{border-left:0;border-top:1px solid var(--line)}.step:not(:last-child)::after{display:none}
+  .ft{grid-template-columns:1fr auto}.hint{display:none}.brand small{display:none}
+}
+@media(prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important}}
+</style></head><body>
+<header class="top">
+  <div class="brand"><div class="logo"><svg viewBox="0 0 24 24"><path d="M12 3 2.5 20h19L12 3z"/><path d="M12 10v4M12 17.5v.01"/></svg></div>
+    <div>Incident Management<small>Production Runbook</small></div></div>
+  <button class="ib" id="fs" title="Toàn màn hình (F)" onclick="fs()"><svg viewBox="0 0 24 24"><path d="M8 3H5a2 2 0 0 0-2 2v3M21 8V5a2 2 0 0 0-2-2h-3M3 16v3a2 2 0 0 0 2 2h3M16 21h3a2 2 0 0 0 2-2v-3"/></svg></button>
+</header>
+<nav id="seg" aria-label="Tiến trình"></nav>
+<main id="stage"></main>
+<div id="lb" onclick="this.classList.remove('on')"><button class="ib x" aria-label="Đóng"><svg viewBox="0 0 24 24"><path d="M18 6 6 18M6 6l12 12"/></svg></button><img alt=""><p></p></div>
+<footer class="ft">
+  <div class="hint"><kbd>←</kbd><kbd>→</kbd> chuyển slide <span style="opacity:.4">·</span> <kbd>F</kbd> toàn màn hình</div>
+  <div class="nav">
+    <button class="ib" onclick="go(-1)" aria-label="Trước"><svg viewBox="0 0 24 24"><path d="m15 18-6-6 6-6"/></svg></button>
+    <span id="pg"></span>
+    <button class="ib" onclick="go(1)" aria-label="Sau"><svg viewBox="0 0 24 24"><path d="m9 18 6-6-6-6"/></svg></button>
+  </div>
+  <button id="pl" onclick="tog()"></button>
+</footer>
+<script>
+const S=[
+{tag:"SLIDE 1",h:"🚨 Quản lý & khắc phục sự cố trên Production",sub:"Phát hiện nhanh – xử lý tạm thời – sửa tận gốc – rút kinh nghiệm",flow:["👀 Phát hiện","🧭 Phân loại mức độ","🩹 Khắc phục tạm","🔧 Sửa vĩnh viễn","📝 Postmortem"],
+n:"Xin chào mọi người. Hôm nay chúng ta cùng tìm hiểu cách quản lý và khắc phục sự cố của phần mềm trên production. Quy trình gồm năm bước: phát hiện, phân loại mức độ, khắc phục tạm thời để giảm thiệt hại, sửa vĩnh viễn nguyên nhân gốc, và cuối cùng là viết báo cáo rút kinh nghiệm.",cards:[
+{i:"📱",h:"Lỗi app",im:["lỗi app người dùng ko thể thao tác ảnh minh họa 1.png"],p:"Người dùng báo lỗi, thao tác không được."},
+{i:"🐢",h:"Lỗi chậm",im:["app bị lỗi timeout.jpeg"],p:"Response time tăng, timeout."},
+{i:"💥",h:"Lỗi crash",im:["app crash.jpeg", "lỗi server restart liên tục.png"],p:"App thoát đột ngột, service restart liên tục."},
+{i:"🖥️",h:"Lỗi server",im:["server error 500.jpeg", "server overload.jpeg"],p:"Server down, domain không truy cập được."}]},
+{tag:"SLIDE 2",h:"🗄️ Sự cố Database",sub:"Nơi dễ nghẽn nhất của hệ thống",n:"Với database, hai sự cố phổ biến là transaction đầy và connection đầy. Khi đó ứng dụng sẽ chậm hoặc báo lỗi hàng loạt.",cards:[
+{i:"💾",h:"DB Transaction full",im:["full-database-storage-icon-isolated-260nw-2623525325.webp"],p:"Transaction log/ổ đĩa đầy, DB không ghi được dữ liệu.",g:96,gl:"Dung lượng log 96%",t:"Tạm thời: kill transaction treo, backup/truncate log, giải phóng đĩa.",v:"Vĩnh viễn: giám sát dung lượng, tối ưu transaction dài, nâng đĩa."},
+{i:"🔌",h:"DB Connection full",im:["DB Connection full cause by transaction not close.webp"],p:"Hết pool kết nối, request mới bị từ chối.",g:100,gl:"Connections 100/100",t:"Tạm thời: kill connection idle, restart app giải phóng pool.",v:"Vĩnh viễn: sửa code rò rỉ connection, chỉnh pool size, dùng read replica."},
+{i:"🔍",h:"Phân tích log DB",im:["database event logs.png", "slow database query.png", "root casue of slow database queries.jpeg", "database index.jpeg"],p:"Xem DB server log, DB event, DB alert, bảng log bên trong DB (slow query, deadlock, lock wait).",t:"Tạm thời: kill query nặng.",v:"Vĩnh viễn: thêm index, tối ưu query, Database migration có kiểm soát."}]},
+{tag:"SLIDE 3",h:"☁️ Hạ tầng & DNS",sub:"Khi nền tảng bên dưới có vấn đề",n:"Hạ tầng cũng có thể gặp sự cố. Ví dụ AWS down, DNS có vấn đề khiến tên miền chết, hoặc server bị down. Cần có kế hoạch dự phòng sẵn.",cards:[
+{i:"🌩️",h:"AWS down",im:["AWS outage.jpeg"],p:"Một region hoặc dịch vụ AWS gián đoạn.",t:"Tạm thời: theo dõi AWS Health, bật trang thông báo bảo trì.",v:"Vĩnh viễn: multi-AZ, multi-region, failover tự động."},
+{i:"🌐",h:"DNS / tên miền chết",im:["website domain issue.png", "dns_probe_finished_bad_config-error-SOLVED.webp", "domain name expire.jpeg", "SSL expire.png"],p:"Domain không phân giải, hết hạn hoặc cấu hình sai record.",t:"Tạm thời: sửa record, truy cập bằng IP, chờ TTL.",v:"Vĩnh viễn: auto-renew domain, DNS dự phòng, giám sát uptime."},
+{i:"🔴",h:"Server down",im:["server down.jpeg"],p:"Máy chủ treo, process chết, không phản hồi.",t:"Tạm thời: Restart server/service.",v:"Vĩnh viễn: load balancer, health check, auto-scaling."}]},
+{tag:"SLIDE 4",h:"🔗 Dịch vụ bên thứ ba",sub:"Không kiểm soát được – chỉ có thể chuẩn bị",n:"Dịch vụ bên thứ ba như Microsoft Graph hay Twilio SMS có thể gặp sự cố, thậm chí chỉ vì chưa thanh toán. Ta cần liên hệ nhà cung cấp và có phương án thay thế.",cards:[
+{i:"📧",h:"Microsoft Graph down",im:["Microsoft_Outage_7431791786.avif"],p:"Gửi mail, lịch, đăng nhập Microsoft bị lỗi.",t:"Tạm thời: kiểm tra trang status, retry sau, xếp hàng đợi.",v:"Vĩnh viễn: retry + queue, kênh gửi dự phòng."},
+{i:"💬",h:"Twilio SMS lỗi",im:["Twillo issue.jpeg"],p:"SMS/OTP không gửi được hoặc gửi chậm.",t:"Tạm thời: liên hệ Twilio qua email/ticket.",v:"Vĩnh viễn: nhà cung cấp SMS dự phòng, OTP qua email."},
+{i:"💳",h:"Chưa thanh toán",im:["credit expired.jpeg"],p:"Hết credit hoặc quá hạn hóa đơn, dịch vụ bị khóa.",t:"Tạm thời: nạp tiền/thanh toán ngay.",v:"Vĩnh viễn: auto-recharge, cảnh báo số dư thấp."}]},
+{tag:"SLIDE 5",h:"🧑‍💻 Lỗi phía người dùng",sub:"Không phải lúc nào cũng do server",n:"Nhiều lỗi đến từ thiết bị người dùng như mạng yếu, trình duyệt cũ hoặc cache hỏng. Ta cần thu thập lỗi trên browser và liên hệ trực tiếp để xem máy của khách.",cards:[
+{i:"📶",h:"Mạng của người dùng",im:["low network.jpeg", "network block by firewall or vpn.png"],p:"Mạng yếu, bị chặn firewall/proxy.",t:"Tạm thời: đổi mạng, thử 4G.",v:"Vĩnh viễn: retry, thông báo mất kết nối rõ ràng."},
+{i:"🌍",h:"Browser / thiết bị",im:["browser compability issue.jpeg"],p:"Trình duyệt cũ, cache hỏng, extension xung đột.",t:"Tạm thời: xóa cache, login/logout, cài lại app.",v:"Vĩnh viễn: hỗ trợ trình duyệt rõ ràng, test đa thiết bị."},
+{i:"🖥️",h:"Hỗ trợ trực tiếp",im:["remote support.webp"],p:"Liên hệ khách, xem màn hình qua remote để tái hiện lỗi.",t:"Tạm thời: remote xem lỗi, hướng dẫn thao tác.",v:"Vĩnh viễn: thêm log/error tracking để khỏi phải hỏi."},
+{i:"🕸️",h:"Bắt lỗi trên browser",im:["check issue from console in chrome dev tool.png"],p:"Sentry, window.onerror, console log, ghi lại HTTP request lỗi.",v:"Gửi lỗi về server kèm user, trình duyệt, bước thao tác."}]},
+{tag:"SLIDE 6",h:"🐛 Lỗi code, logic, config & Kafka",sub:"Nguyên nhân thường nằm ở thay đổi gần nhất",n:"Lỗi logic và lỗi cấu hình thường xuất hiện sau mỗi lần deploy. Với Kafka, cần chú ý consumer lag và dữ liệu bị xử lý trùng lặp.",cards:[
+{i:"🧠",h:"Lỗi logic",p:"Tính sai, sai luồng nghiệp vụ, dữ liệu sai.",t:"Tạm thời: rollback phiên bản, tắt tính năng (feature flag).",v:"Vĩnh viễn: sửa code, thêm unit test, code review."},
+{i:"⚙️",h:"Lỗi config",p:"Sai biến môi trường, sai connection string, thiếu quyền.",t:"Tạm thời: khôi phục config cũ.",v:"Vĩnh viễn: quản lý config bằng code, kiểm tra trước deploy."},
+{i:"📨",h:"Kafka lag",im:["kafka consumer lag.jpeg"],p:"Consumer xử lý chậm, message tồn đọng.",g:75,gl:"Lag tăng cao",t:"Tạm thời: tăng số consumer.",v:"Vĩnh viễn: tối ưu consumer, tăng partition."},
+{i:"♻️",h:"Duplicate consume",im:["kafka duplicate message handle by idempotency.jpeg", "kafka idempotency explain.jpg"],p:"Cùng một message bị xử lý nhiều lần.",t:"Tạm thời: dọn dữ liệu trùng.",v:"Vĩnh viễn: xử lý idempotent, lưu message id."}]},
+{tag:"SLIDE 7",h:"📈 Peak traffic: CPU, RAM, Disk",sub:"Tải tăng đột biến làm hệ thống chậm",n:"Khi lượng truy cập tăng đột biến, CPU, RAM và ổ đĩa có thể quá tải làm hệ thống chậm. Cách khắc phục là restart, scale tạm thời, rồi nâng cấu hình hoặc tối ưu lâu dài.",cards:[
+{i:"🔥",h:"CPU",im:["overload cpu, ram issue.png"],p:"Xử lý nặng, vòng lặp, query tốn tài nguyên.",g:97,gl:"CPU 97%",t:"Tạm thời: scale out, restart service.",v:"Vĩnh viễn: tối ưu code, nâng CPU."},
+{i:"🧮",h:"RAM",im:["overload cpu, ram issue.jpeg"],p:"Memory leak, cache phình to, dễ gây crash (OOM).",g:92,gl:"RAM 92%",t:"Tạm thời: restart server.",v:"Vĩnh viễn: sửa leak, nâng RAM."},
+{i:"💽",h:"Disk",im:["log overload disk.webp", "run out of server storage issue.png"],p:"Log phình to, đầy ổ đĩa, I/O chậm.",g:89,gl:"Disk 89%",t:"Tạm thời: xóa log cũ.",v:"Vĩnh viễn: log rotation, mở rộng ổ đĩa."}]},
+{tag:"SLIDE 8",h:"🧰 Tổng kết: tạm thời vs vĩnh viễn",sub:"Ưu tiên khôi phục dịch vụ trước, tìm nguyên nhân gốc sau",n:"Tổng kết lại: khi có sự cố hãy ưu tiên khôi phục dịch vụ bằng giải pháp tạm thời, sau đó tìm nguyên nhân gốc và sửa vĩnh viễn. Cuối cùng, ghi lại bài học để không lặp lại.",cards:[
+{i:"🩹",h:"Giải pháp tạm thời",p:"Restart server • Login/logout • Cài lại app • Liên hệ bên thứ ba qua email • Rollback • Liên hệ trực tiếp khách để xem lỗi.",t:"Mục tiêu: khôi phục nhanh, giảm thiệt hại."},
+{i:"🏗️",h:"Giải pháp vĩnh viễn",p:"Database migration • Nâng CPU/RAM cho server và DB • Tìm giải pháp hoặc chức năng thay thế • Monitoring & alert • Postmortem.",v:"Mục tiêu: không để sự cố lặp lại."}]}
+];
+const SEC=["Tổng quan","Database","Hạ tầng & DNS","Bên thứ ba","Phía người dùng","Code · Config · Kafka","Hiệu năng","Tổng kết"];
+const strip=s=>s.replace(/^[^\p{L}\p{N}]+/u,'');
+const sol=(x,k)=>{const m=x.match(/^(Tạm thời|Vĩnh viễn|Mục tiêu):\s*(.*)$/s);return `<div class="f ${k}"><span>${m?m[1]:'Vĩnh viễn'}</span>${m?m[2]:x}</div>`};
+const ICON={play:'<svg viewBox="0 0 24 24"><path d="M7 4.5v15a1 1 0 0 0 1.5.86l12-7.5a1 1 0 0 0 0-1.72l-12-7.5A1 1 0 0 0 7 4.5z"/></svg>',stop:'<svg viewBox="0 0 24 24"><rect x="5.5" y="5.5" width="13" height="13" rx="2.5"/></svg>'};
+const st=document.getElementById('stage'),seg=document.getElementById('seg');let cur=0,speaking=false;
+S.forEach((s,si)=>{const d=document.createElement('section');d.className='slide';
+const n2=String(si+1).padStart(2,'0');
+let h=`<div class="kick"><b>${n2}</b><i></i>${SEC[si]}</div><h1>${strip(s.h)}</h1><p class="sub">${s.sub}</p>`;
+if(s.flow)h+=`<div class="flow">${s.flow.map((x,k)=>`<div class="step"><em>${k+1}</em>${strip(x)}</div>`).join('')}</div>`;
+const wide=s.cards.length<=2;
+h+=`<div class="grid${wide?' wide':''}">`+s.cards.map((c,k)=>{
+ const body=c.p.includes(' • ')?`<ul class="ul">${c.p.split(' • ').map(x=>`<li>${x.replace(/\.$/,'')}</li>`).join('')}</ul>`:`<p>${c.p}</p>`;
+ const n=c.im?c.im.length:0;
+ return `<article class="c" style="--i:${k}">${n?`<div class="im n${n}">${c.im.map(f=>`<img loading="lazy" src="${encodeURI(f)}" alt="${c.h}" onclick="zoom(this,event)">`).join('')}</div>`:''}<div class="cb"><div class="idx">${String(k+1).padStart(2,'0')}</div><h3>${c.h}</h3>${body}${c.g?`<div class="gauge"><div class="gh"><span>${c.gl.replace(/\s*\d+.*$/,'')||c.gl}</span><b>${c.g}%</b></div><div class="bar"><i data-g="${c.g}"></i></div></div>`:''}${(c.t||c.v)?`<div class="sol">${c.t?sol(c.t,'t'):''}${c.v?sol(c.v,'v'):''}</div>`:''}</div></article>`}).join('')+'</div>';
+d.innerHTML=h;st.appendChild(d);
+const b=document.createElement('button');b.title=`${n2} · ${SEC[si]}`;b.onclick=()=>go(si-cur);seg.appendChild(b)});
+const sl=[...document.querySelectorAll('.slide')],sb=[...seg.children];
+const setBtn=()=>{const p=document.getElementById('pl');p.classList.toggle('live',speaking);p.innerHTML=(speaking?ICON.stop+'Dừng':ICON.play+'Thuyết trình')};
+function show(i){cur=(i+sl.length)%sl.length;sl.forEach((e,k)=>e.classList.toggle('on',k==cur));
+sb.forEach((e,k)=>{e.classList.toggle('on',k==cur);e.classList.toggle('done',k<cur)});
+document.getElementById('pg').innerHTML='<b>'+String(cur+1).padStart(2,'0')+'</b> / '+String(sl.length).padStart(2,'0');st.scrollTop=0;
+try{history.replaceState(null,'','#'+(cur+1))}catch(e){}
+sl[cur].querySelectorAll('.bar i').forEach(b=>{b.style.width=0;setTimeout(()=>b.style.width=b.dataset.g+'%',250)})}
+function text(s){return s.h.replace(/[^\p{L}\p{N}\s&]/gu,'')+'. '+s.n+' '+s.cards.map(c=>c.h+'. '+c.p+' '+(c.t||'')+' '+(c.v||'')).join(' ')}
+function say(){speechSynthesis.cancel();const u=new SpeechSynthesisUtterance(text(S[cur]).replace(/[•→]/g,','));
+u.lang='vi-VN';const v=speechSynthesis.getVoices().find(x=>x.lang.startsWith('vi'));if(v)u.voice=v;u.rate=.95;
+u.onend=()=>{if(speaking){if(cur<S.length-1){show(cur+1);say()}else tog()}};speechSynthesis.speak(u)}
+function tog(){speaking=!speaking;setBtn();speaking?say():speechSynthesis.cancel()}
+function zoom(img,e){e.stopPropagation();const l=document.getElementById('lb');l.querySelector('img').src=img.src;l.querySelector('p').textContent=img.alt;l.classList.add('on')}
+function go(d){show(cur+d);if(speaking)say()}
+function fs(){document.fullscreenElement?document.exitFullscreen():document.documentElement.requestFullscreen&&document.documentElement.requestFullscreen()}
+document.onkeydown=e=>{const l=document.getElementById('lb');if(l.classList.contains('on')){if(e.key=='Escape')l.classList.remove('on');return}
+if(e.key=='ArrowRight'||e.key=='PageDown'||e.key==' '){e.preventDefault();go(1)}
+else if(e.key=='ArrowLeft'||e.key=='PageUp')go(-1);
+else if(e.key=='Home')go(-cur);else if(e.key=='End')go(sl.length-1-cur);
+else if(e.key=='f'||e.key=='F')fs()};
+speechSynthesis.onvoiceschanged=()=>{};setBtn();
+const hv=parseInt(location.hash.slice(1));show(hv>=1&&hv<=sl.length?hv-1:0);
+</script></body></html>
