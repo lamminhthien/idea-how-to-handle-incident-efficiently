@@ -214,14 +214,20 @@ function pickVoice(){const vs=speechSynthesis.getVoices().filter(x=>/^vi/i.test(
  const sc=v=>(/natural|neural|online|premium|enhanced|siri/i.test(v.name)?4:0)+(/google|microsoft/i.test(v.name)?2:0)+(/linh|hoaimy|namminh/i.test(v.name)?2:0)+(v.localService?0:1);
  return vs.sort((a,b)=>sc(b)-sc(a))[0]}
 let tok=0,tm=0;
-function say(){speechSynthesis.cancel();clearTimeout(tm);const my=++tok,q=parts(S[cur]),v=pickVoice();let i=0;
+function sayTTS(){speechSynthesis.cancel();clearTimeout(tm);const my=++tok,q=parts(S[cur]),v=pickVoice();let i=0;
  const next=()=>{if(my!=tok||!speaking)return;
   if(i>=q.length){if(cur<S.length-1){tm=setTimeout(()=>{if(my!=tok||!speaking)return;show(cur+1);say()},700)}else tog();return}
   const c=q[i++],u=new SpeechSynthesisUtterance(c.t);u.lang='vi-VN';if(v)u.voice=v;u.rate=c.r;u.pitch=c.p;u.volume=1;
   let done=0;const fin=()=>{if(done++)return;tm=setTimeout(next,c.w)};u.onend=fin;u.onerror=e=>{if(e.error=='canceled'||e.error=='interrupted')return;fin()};
   speechSynthesis.speak(u)};
  next()}
-function tog(){speaking=!speaking;setBtn();if(speaking)say();else{tok++;clearTimeout(tm);speechSynthesis.cancel()}}
+// ưu tiên file mp3 (giọng neural, tạo bằng tools/make-audio.mjs); thiếu file thì đọc bằng giọng trình duyệt
+const au=new Audio();
+function say(){speechSynthesis.cancel();clearTimeout(tm);au.pause();const my=++tok;
+ au.onended=()=>{if(my!=tok||!speaking)return;if(cur<S.length-1)tm=setTimeout(()=>{if(my!=tok||!speaking)return;show(cur+1);say()},800);else tog()};
+ au.onerror=()=>{if(my==tok&&speaking)sayTTS()};
+ au.src='audio/slide-'+String(cur+1).padStart(2,'0')+'.mp3';au.play().catch(()=>{})}
+function tog(){speaking=!speaking;setBtn();if(speaking)say();else{tok++;clearTimeout(tm);au.pause();speechSynthesis.cancel()}}
 function zoom(img,e){e.stopPropagation();const l=document.getElementById('lb');l.querySelector('img').src=img.src;l.querySelector('p').textContent=img.alt;l.classList.add('on')}
 function go(d){show(cur+d);if(speaking)say()}
 function fs(){document.fullscreenElement?document.exitFullscreen():document.documentElement.requestFullscreen&&document.documentElement.requestFullscreen()}
